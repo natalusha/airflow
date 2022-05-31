@@ -62,7 +62,7 @@ def same_df(prefix: str, df, col_order: list):
     df.columns = ["date", "price", "amount", "type"]
     df["stock exchange"] = prefix
     df2 = df.drop_duplicates()
-    return df2
+    return df
 
 
 def concat_dfs(
@@ -73,23 +73,20 @@ def concat_dfs(
 
     objects = s3.Bucket(out_bucket).objects.all().filter(Prefix=f"{prefix}/")
     dfs = []
-    try:
-        for obj in objects:
-            from_zone = tz.tzutc()
-            to_zone = tz.tzlocal()
-            last_date_utc = obj.last_modified.replace(tzinfo=from_zone)
-            central = last_date_utc.astimezone(to_zone)
-            last_date_central = central.replace(tzinfo=None)
-            cur_date = datetime.now()
-            diff_minutes = ((cur_date - last_date_central).total_seconds()) / 60
-            if diff_minutes <= 60:
-                obj_str = obj.get()["Body"].read()
-                df = pd.read_json(BytesIO(obj_str))
-                dfs.append(df)
-        df = pd.concat(dfs)
-        return df
-    except ValueError as er:
-        print(er)
+    for obj in objects:
+        from_zone = tz.tzutc()
+        to_zone = tz.tzlocal()
+        last_date_utc = obj.last_modified.replace(tzinfo=from_zone)
+        central = last_date_utc.astimezone(to_zone)
+        last_date_central = central.replace(tzinfo=None)
+        cur_date = datetime.now()
+        diff_minutes = ((cur_date - last_date_central).total_seconds()) / 60
+        if diff_minutes <= 60:
+            obj_str = obj.get()["Body"].read()
+            df = pd.read_json(BytesIO(obj_str))
+            dfs.append(df)
+    df = pd.concat(dfs)
+    return df
 
 
 def _read_and_format():
@@ -124,6 +121,7 @@ def _read_and_format():
         ["date", "rate", "amount", "type"],
     )
     vertical_concat = pd.concat([dft1, dft2, dft3], axis=0)
+    t = dataframe_to_s3(s3, vertical_concat, "prettydata", "result.parquet", "parquet")
 
 
 def _insert_parq():
